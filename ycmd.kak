@@ -4,7 +4,7 @@ decl int ycmd_port 12345
 decl -hidden int ycmd_pid 0
 decl -hidden str ycmd_hmac_key
 decl -hidden str ycmd_tmp_dir
-decl -hidden str-list ycmd_completions
+decl -hidden completions ycmd_completions
 
 def ycmd-start %{ %sh{
     if [ -z "${kak_opt_ycmd_path}" ]; then
@@ -107,11 +107,15 @@ httphdr="Content-Type: application/json; charset=utf8
 X-Ycm-Hmac: $hmac"
 
             json=$(curl -H "$httphdr" "http://127.0.0.1:${port}${path}" -d "$query" 2> ${dir}/curl-err)
-            compl=$(echo -n "$json" | jq -j '.completions[] | "\(.insertion_text)@\(.detailed_info)" | gsub(":"; "\\:") + ":"' 2> ${dir}/jq-err)
+            echo "${json}" > /tmp/json
+            compl=$(echo -n "$json" | jq -j '.completions[] | "\(.insertion_text)|\(.menu_text)|\(.insertion_text)" | gsub(":"; "\\:") + ":"' 2> ${dir}/jq-err | head -c -1)
             column=$(echo -n "$json" | jq -j .completion_start_column 2>> ${dir}/jq-err)
-
             header="${kak_cursor_line}.${column}@${kak_timestamp}"
-            echo "eval -client ${kak_client} %[ echo completed; set 'buffer=${kak_buffile}' ycmd_completions %[${header}:${compl}] ]" | kak -p ${kak_session}
+            compl="${header}:${compl}"
+            compl="${compl//(/[}"
+            compl="${compl//)/]}"
+            echo "${compl}" > /tmp/compl
+            echo "eval -client ${kak_client} %(echo completed; set 'buffer=${kak_buffile}' ycmd_completions %(${compl}) )" | kak -p ${kak_session}
         ) > /dev/null 2>&1 < /dev/null &
     }
 }
